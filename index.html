@@ -1,0 +1,1624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Storage Analyzer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #3498db;
+            --primary-hover: #2980b9;
+            --secondary-color: #f5f5f5;
+            --text-color: #333;
+            --border-color: #ddd;
+            --background-color: #fff;
+            --header-background: #f8f9fa;
+            --even-row: #f2f2f2;
+            --hover-row: #e8f4fc;
+            --danger-color: #e74c3c;
+            --danger-hover: #c0392b;
+            --success-color: #2ecc71;
+            --warning-color: #f39c12;
+            --tree-indent: 20px;
+            --icon-size: 16px;
+        }
+
+        .dark-theme {
+            --primary-color: #4c84af;
+            --primary-hover: #67a2d1;
+            --secondary-color: #2c3e50;
+            --text-color: #ecf0f1;
+            --border-color: #34495e;
+            --background-color: #1a1a1a;
+            --header-background: #2c3e50;
+            --even-row: #2c3e50;
+            --hover-row: #3c546c;
+            --danger-color: #c0392b;
+            --danger-hover: #e74c3c;
+            --success-color: #27ae60;
+            --warning-color: #f39c12;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 28px;
+            color: var(--primary-color);
+        }
+
+        .version {
+            color: var(--primary-color);
+            font-size: 0.8em;
+        }
+
+        .section {
+            background: var(--background-color);
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .section h2 {
+            margin-top: 0;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+            color: var(--primary-color);
+        }
+
+        /* Form controls */
+        .row {
+            display: flex;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        input[type="text"],
+        select {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background-color: var(--background-color);
+            color: var(--text-color);
+        }
+
+        input[type="text"]:focus,
+        select:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.3);
+        }
+
+        .input-group {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        button {
+            padding: 8px 15px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            white-space: nowrap;
+        }
+
+        button:hover {
+            background-color: var(--primary-hover);
+        }
+
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        .btn-danger {
+            background-color: var(--danger-color);
+        }
+
+        .btn-danger:hover {
+            background-color: var(--danger-hover);
+        }
+
+        .btn-small {
+            padding: 4px 8px;
+            font-size: 12px;
+        }
+
+        /* Tree View */
+        .results-container {
+            display: flex;
+            gap: 20px;
+            height: 500px;
+        }
+
+        .tree-view-container {
+            width: 250px;
+            overflow-y: auto;
+            border-right: 1px solid var(--border-color);
+            flex-shrink: 0;
+        }
+
+        .directory-tree {
+            font-size: 14px;
+            padding: 10px 0;
+        }
+
+        .tree-item {
+            padding: 4px 8px;
+            cursor: pointer;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: flex;
+            align-items: center;
+        }
+
+        .tree-item:hover {
+            background-color: var(--hover-row);
+        }
+
+        .tree-item.selected {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .tree-icon {
+            margin-right: 5px;
+            width: var(--icon-size);
+            height: var(--icon-size);
+            text-align: center;
+            display: inline-block;
+            font-weight: bold;
+        }
+
+        .tree-children {
+            margin-left: var(--tree-indent);
+            display: none;
+        }
+
+        .tree-children.expanded {
+            display: block;
+        }
+
+        .results-panel {
+            flex-grow: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .results-panel h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            color: var(--primary-color);
+        }
+        
+        /* Tables */
+        .table-container {
+            overflow-x: auto;
+            flex-grow: 1;
+            overflow-y: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+        
+        .virtual-table-container {
+            overflow-y: auto;
+            flex-grow: 1;
+            position: relative;
+        }
+
+        th {
+            position: sticky;
+            top: 0;
+            background-color: var(--header-background);
+            padding: 10px;
+            text-align: left;
+            border-bottom: 2px solid var(--border-color);
+            cursor: pointer;
+        }
+
+        th:hover {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        td {
+            padding: 8px 10px;
+            border-bottom: 1px solid var(--border-color);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        tr:nth-child(even) {
+            background-color: var(--even-row);
+        }
+
+        tr:hover {
+            background-color: var(--hover-row);
+        }
+
+        /* Column widths */
+        .col-path {
+            width: 60%;
+        }
+
+        .col-size {
+            width: 15%;
+            text-align: right;
+        }
+
+        .col-type {
+            width: 10%;
+        }
+
+        .col-date {
+            width: 15%;
+        }
+
+        /* Status and progress */
+        .progress-container {
+            width: 100%;
+            background-color: var(--border-color);
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+
+        .progress-bar {
+            height: 20px;
+            width: 0;
+            background-color: var(--primary-color);
+            border-radius: 4px;
+            transition: width 0.3s;
+        }
+
+        .status {
+            margin-top: 5px;
+            font-size: 14px;
+            color: var(--text-color);
+        }
+
+        /* Statistics */
+        .stats {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-top: 10px;
+        }
+
+        .stat-item {
+            flex: 1;
+            min-width: 150px;
+            background-color: var(--secondary-color);
+            padding: 15px;
+            border-radius: 5px;
+            text-align: center;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-value {
+            font-size: 20px;
+            font-weight: bold;
+            color: var(--primary-color);
+            margin-top: 5px;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            color: var(--text-color);
+        }
+
+        /* Charts */
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin: 20px 0;
+        }
+
+        /* Context menu */
+        .context-menu {
+            display: none;
+            position: absolute;
+            background-color: var(--background-color);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            padding: 5px 0;
+            z-index: 1000;
+        }
+
+        .context-menu div {
+            padding: 8px 15px;
+            cursor: pointer;
+        }
+
+        .context-menu div:hover {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .context-menu .separator {
+            border-top: 1px solid var(--border-color);
+            margin: 5px 0;
+            padding: 0;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            overflow: auto;
+        }
+
+        .modal-content {
+            background-color: var(--background-color);
+            margin: 10% auto;
+            padding: 20px;
+            border-radius: 5px;
+            width: 80%;
+            max-width: 600px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            color: var(--primary-color);
+        }
+
+        .close {
+            color: var(--text-color);
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close:hover {
+            color: var(--primary-color);
+        }
+
+        /* API not supported message */
+        .api-warning {
+            background-color: var(--warning-color);
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            display: none;
+        }
+
+        /* Responsive layout */
+        @media (max-width: 768px) {
+            .row {
+                flex-direction: column;
+            }
+
+            .input-group {
+                width: 100%;
+            }
+
+            .stat-item {
+                min-width: 100%;
+            }
+
+            table {
+                font-size: 14px;
+            }
+
+            th, td {
+                padding: 6px;
+            }
+
+            .col-path {
+                width: 40%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Web Storage Analyzer <span class="version">v3.0</span></h1>
+            <div>
+                <button id="themeToggle">Toggle Theme</button>
+                <button id="aboutBtn">About</button>
+            </div>
+        </header>
+
+        <div id="apiWarning" class="api-warning">
+            <strong>Warning:</strong> The File System Access API is not supported in your browser. 
+            Please use Chrome 86+, Edge 86+, or Opera 72+ to use this application with direct file system access.
+        </div>
+
+        <div class="section">
+            <h2>Location</h2>
+            <div class="row">
+                <div class="input-group">
+                    <label for="currentDirectory">Selected Directory:</label>
+                    <input type="text" id="currentDirectory" readonly placeholder="No directory selected">
+                </div>
+                <div style="display: flex; align-items: end; gap: 10px;">
+                    <button id="selectDirBtn">Select Directory</button>
+                    <button id="scanBtn" disabled>Scan</button>
+                    <button id="stopBtn" disabled>Stop</button>
+                </div>
+            </div>
+            <div class="progress-container">
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+            <div class="status" id="statusText">Ready</div>
+        </div>
+
+        <div class="section">
+            <h2>Filter & Analysis</h2>
+            <div class="row">
+                <div class="input-group">
+                    <label for="searchInput">Search:</label>
+                    <input type="text" id="searchInput" placeholder="Search for files...">
+                </div>
+                <div class="input-group">
+                    <label for="fileTypeFilter">File Type:</label>
+                    <select id="fileTypeFilter">
+                        <option value="All">All</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label for="fileCategoryFilter">Category:</label>
+                    <select id="fileCategoryFilter">
+                        <option value="All">All</option>
+                        <option value="images">Images</option>
+                        <option value="documents">Documents</option>
+                        <option value="videos">Videos</option>
+                        <option value="audio">Audio</option>
+                        <option value="archives">Archives</option>
+                        <option value="code">Code</option>
+                        <option value="executables">Executables</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label for="sizeFilter">Size:</label>
+                    <select id="sizeFilter">
+                        <option value="Any">Any</option>
+                        <option value=">1GB">&gt;1GB</option>
+                        <option value=">100MB">&gt;100MB</option>
+                        <option value=">10MB">&gt;10MB</option>
+                        <option value="<1MB">&lt;1MB</option>
+                    </select>
+                </div>
+            </div>
+            <div class="row" style="justify-content: flex-start;">
+                <button id="applyFilterBtn">Apply Filter</button>
+                <button id="suggestCloudBtn">Suggest Cloud</button>
+                <button id="findDuplicatesBtn">Find Duplicates</button>
+                <button id="resetBtn">Reset</button>
+                <button id="categoryChartBtn">Category Chart</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="results-container">
+                <!-- Tree View -->
+                <div id="treeViewContainer" class="tree-view-container">
+                    <h3>Directory Tree</h3>
+                    <div id="directoryTree" class="directory-tree"></div>
+                </div>
+                
+                <!-- Results Table -->
+                <div class="results-panel">
+                    <h3>Scan Results</h3>
+                    <div class="table-container">
+                        <table id="resultsTable">
+                            <thead>
+                                <tr>
+                                    <th class="col-path" data-sort="path">Path</th>
+                                    <th class="col-size" data-sort="size">Size (MB)</th>
+                                    <th class="col-type" data-sort="type">Type</th>
+                                    <th class="col-date" data-sort="date">Modified</th>
+                                </tr>
+                            </thead>
+                        </table>
+                        <div id="virtualTableContainer" class="virtual-table-container">
+                            <!-- Virtual scrolling container -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Summary</h2>
+            <div class="stats">
+                <div class="stat-item">
+                    <div class="stat-label">Total Files</div>
+                    <div class="stat-value" id="totalFiles">0</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Total Size</div>
+                    <div class="stat-value" id="totalSize">0 MB</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Average Size</div>
+                    <div class="stat-value" id="avgSize">0 MB</div>
+                </div>
+            </div>
+            <div class="row" style="justify-content: flex-start; margin-top: 15px;">
+                <button id="pieChartBtn">Pie Chart</button>
+                <button id="barChartBtn">Bar Chart</button>
+                <button id="exportCsvBtn">Export CSV</button>
+            </div>
+        </div>
+
+        <!-- Visualization Section -->
+        <div class="section" id="chartSection" style="display: none;">
+            <h2 id="chartTitle">Storage Visualization</h2>
+            <div class="chart-container">
+                <canvas id="chartCanvas"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Context Menu -->
+    <div class="context-menu" id="contextMenu">
+        <div id="openExplorerMenu">Open in Explorer</div>
+        <div id="openFileMenu">Open File</div>
+        <div class="separator"></div>
+        <div id="deleteMenu" class="btn-danger">Delete</div>
+        <div id="copyToMenu">Copy to...</div>
+        <div id="moveToCloudMenu">Move to Cloud Folder</div>
+    </div>
+
+    <!-- About Modal -->
+    <div id="aboutModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>About Web Storage Analyzer</h2>
+                <span class="close">&times;</span>
+            </div>
+            <p>Web Storage Analyzer v3.0</p>
+            <p>This web application helps you analyze your computer's storage, find large files, identify duplicates, and manage your disk space more effectively.</p>
+            <p>Features:</p>
+            <ul>
+                <li>Scan your directories to analyze storage usage</li>
+                <li>Filter files by size, type, and name</li>
+                <li>Find potential duplicate files</li>
+                <li>Visualize storage distribution</li>
+                <li>Export results to CSV</li>
+                <li>Light and dark themes</li>
+            </ul>
+            <p>This version uses the File System Access API to directly access and analyze your files without uploading them.</p>
+            <p>Note: This application only works in modern browsers that support the File System Access API (Chrome 86+, Edge 86+, Opera 72+).</p>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check if File System Access API is supported
+            const isFileSystemAccessSupported = 'showDirectoryPicker' in window;
+            
+            if (!isFileSystemAccessSupported) {
+                document.getElementById('apiWarning').style.display = 'block';
+                document.getElementById('selectDirBtn').disabled = true;
+                console.error('File System Access API is not supported in this browser.');
+            }
+            
+            // Fix the CDN URLs first
+            // Load Chart.js
+            if (!window.Chart) {
+                const chartScript = document.createElement('script');
+                chartScript.src = "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js";
+                document.head.appendChild(chartScript);
+            }
+            
+            // Load PapaParse
+            if (!window.Papa) {
+                const papaScript = document.createElement('script');
+                papaScript.src = "https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js";
+                document.head.appendChild(papaScript);
+            }
+            
+            // Application state variables
+            const state = {
+                scanData: [],
+                currentView: [],
+                scanning: false,
+                sortColumn: 'path',
+                sortDirection: false, // false = ascending, true = descending
+                theme: localStorage.getItem('theme') || 'light',
+                chart: null,
+                selectedRow: null,
+                directoryTree: {},
+                selectedDirectory: null,
+                directoryHandle: null, // Store the directory handle for File System Access API
+                rowHeight: 35, // Height of each row in pixels
+                visibleRows: 0, // Number of rows visible at once
+                scrollPosition: 0,
+                virtualTableItems: [], // Items currently in virtual table
+                categoryChart: null
+            };
+
+            // Define file categories based on extensions
+            const fileCategories = {
+                'images': ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.webp', '.tiff', '.ico'],
+                'documents': ['.pdf', '.doc', '.docx', '.txt', '.rtf', '.odt', '.xls', '.xlsx', '.ppt', '.pptx', '.csv', '.md'],
+                'videos': ['.mp4', '.avi', '.mov', '.wmv', '.flv', '.mkv', '.webm', '.m4v', '.mpeg', '.mpg'],
+                'audio': ['.mp3', '.wav', '.ogg', '.flac', '.aac', '.wma', '.m4a', '.aiff'],
+                'archives': ['.zip', '.rar', '.7z', '.tar', '.gz', '.bz2', '.xz', '.iso'],
+                'code': ['.js', '.py', '.java', '.c', '.cpp', '.h', '.cs', '.php', '.html', '.css', '.xml', '.json', '.sql', '.rb', '.pl', '.swift', '.kt', '.go', '.ts', '.jsx', '.tsx'],
+                'executables': ['.exe', '.dll', '.msi', '.app', '.bat', '.sh', '.com', '.bin'],
+                'other': []
+            };
+
+            // Apply theme from localStorage
+            if (state.theme === 'dark') {
+                document.body.classList.add('dark-theme');
+            }
+
+            // DOM elements
+            const elements = {
+                selectDirBtn: document.getElementById('selectDirBtn'),
+                currentDirectory: document.getElementById('currentDirectory'),
+                scanBtn: document.getElementById('scanBtn'),
+                stopBtn: document.getElementById('stopBtn'),
+                progressBar: document.getElementById('progressBar'),
+                statusText: document.getElementById('statusText'),
+                searchInput: document.getElementById('searchInput'),
+                fileTypeFilter: document.getElementById('fileTypeFilter'),
+                fileCategoryFilter: document.getElementById('fileCategoryFilter'),
+                sizeFilter: document.getElementById('sizeFilter'),
+                applyFilterBtn: document.getElementById('applyFilterBtn'),
+                suggestCloudBtn: document.getElementById('suggestCloudBtn'),
+                findDuplicatesBtn: document.getElementById('findDuplicatesBtn'),
+                resetBtn: document.getElementById('resetBtn'),
+                categoryChartBtn: document.getElementById('categoryChartBtn'),
+                resultsTable: document.getElementById('resultsTable'),
+                totalFiles: document.getElementById('totalFiles'),
+                totalSize: document.getElementById('totalSize'),
+                avgSize: document.getElementById('avgSize'),
+                pieChartBtn: document.getElementById('pieChartBtn'),
+                barChartBtn: document.getElementById('barChartBtn'),
+                exportCsvBtn: document.getElementById('exportCsvBtn'),
+                themeToggle: document.getElementById('themeToggle'),
+                aboutBtn: document.getElementById('aboutBtn'),
+                chartSection: document.getElementById('chartSection'),
+                chartCanvas: document.getElementById('chartCanvas'),
+                chartTitle: document.getElementById('chartTitle'),
+                contextMenu: document.getElementById('contextMenu'),
+                openExplorerMenu: document.getElementById('openExplorerMenu'),
+                openFileMenu: document.getElementById('openFileMenu'),
+                deleteMenu: document.getElementById('deleteMenu'),
+                copyToMenu: document.getElementById('copyToMenu'),
+                moveToCloudMenu: document.getElementById('moveToCloudMenu'),
+                aboutModal: document.getElementById('aboutModal'),
+                directoryTree: document.getElementById('directoryTree'),
+                virtualTableContainer: document.getElementById('virtualTableContainer'),
+                apiWarning: document.getElementById('apiWarning')
+            };
+
+            // Initialize UI event listeners
+            initEventListeners();
+            initTableSorting();
+
+            // Select directory using File System Access API
+            async function selectDirectory() {
+                if (!isFileSystemAccessSupported) {
+                    alert('File System Access API is not supported in your browser. Please use Chrome 86+, Edge 86+, or Opera 72+.');
+                    return;
+                }
+                
+                try {
+                    // Show directory picker
+                    state.directoryHandle = await window.showDirectoryPicker();
+                    
+                    // Update UI
+                    elements.currentDirectory.value = state.directoryHandle.name;
+                    elements.scanBtn.disabled = false;
+                    elements.statusText.textContent = `Directory "${state.directoryHandle.name}" selected. Click Scan to begin.`;
+                } catch (error) {
+                    console.error('Error selecting directory:', error);
+                    if (error.name !== 'AbortError') { // Ignore if user cancelled
+                        alert(`Error selecting directory: ${error.message}`);
+                    }
+                }
+            }
+
+            // Handle file scanning
+            async function startScan() {
+                if (!state.directoryHandle) {
+                    alert('Please select a directory first');
+                    return;
+                }
+
+                state.scanning = true;
+                elements.scanBtn.disabled = true;
+                elements.stopBtn.disabled = false;
+                elements.progressBar.style.width = '0%';
+                elements.statusText.textContent = 'Scanning...';
+
+                try {
+                    // Process files using File System Access API
+                    const results = await scanDirectoryWithFSAPI(state.directoryHandle);
+                    
+                    if (state.scanning) { // Only process if not stopped
+                        state.scanData = results;
+                        state.currentView = results;
+                        
+                        // Build and render directory tree
+                        state.directoryTree = buildDirectoryTree(results);
+                        renderDirectoryTree(state.directoryTree, elements.directoryTree);
+                        
+                        // Display data using virtual scrolling
+                        displayDataVirtual(results);
+                        updateStatistics(results);
+                        updateFileTypeFilter(results);
+                        elements.statusText.textContent = `Scan complete. ${results.length} items found.`;
+                        elements.progressBar.style.width = '100%';
+                        console.log(`Scan completed: ${results.length} files found`);
+                    }
+                } catch (error) {
+                    console.error('Scan error:', error);
+                    alert(`Scan failed: ${error.message}`);
+                } finally {
+                    state.scanning = false;
+                    elements.scanBtn.disabled = false;
+                    elements.stopBtn.disabled = true;
+                }
+            }
+
+            // Scan directory using File System Access API
+            async function scanDirectoryWithFSAPI(directoryHandle, basePath = '') {
+                const results = [];
+                
+                // Track progress info
+                let processedCount = 0;
+                let totalCount = 0; // Will be updated as we discover files
+                
+                // First count approximate total files (for progress estimation)
+                async function countFiles(handle, path = '') {
+                    let count = 0;
+                    
+                    // Use a limit to prevent too much counting overhead
+                    const MAX_COUNT = 1000;
+                    
+                    try {
+                        for await (const entry of handle.values()) {
+                            if (!state.scanning) break; // Check if scanning was stopped
+                            
+                            if (entry.kind === 'directory') {
+                                try {
+                                    const subCount = await countFiles(entry);
+                                    count += subCount;
+                                    
+                                    // If we've counted enough, stop counting for performance
+                                    if (count > MAX_COUNT) break;
+                                } catch (error) {
+                                    console.warn(`Could not access directory: ${path}/${entry.name}`, error);
+                                }
+                            } else if (entry.kind === 'file') {
+                                count++;
+                                
+                                // If we've counted enough, stop counting for performance
+                                if (count > MAX_COUNT) break;
+                            }
+                        }
+                    } catch (error) {
+                        console.warn(`Error counting files in directory: ${path}`, error);
+                    }
+                    
+                    return count;
+                }
+                
+                // Estimate file count (with a limit to prevent slow startup)
+                try {
+                    totalCount = await countFiles(directoryHandle);
+                    // Add buffer for better UX (more files will be discovered during scanning)
+                    totalCount = Math.max(totalCount * 1.5, 100);
+                } catch (error) {
+                    console.warn('Error estimating file count:', error);
+                    totalCount = 100; // Default estimate
+                }
+                
+                // Recursive function to scan directories
+                async function scanHandle(handle, path = '') {
+                    if (!state.scanning) return; // Check if scanning was stopped
+                    
+                    try {
+                        for await (const entry of handle.values()) {
+                            if (!state.scanning) break; // Check if scanning was stopped
+                            
+                            const entryPath = path ? `${path}/${entry.name}` : entry.name;
+                            
+                            if (entry.kind === 'directory') {
+                                try {
+                                    // Try to get a handle to the directory (checks permission)
+                                    const subDirHandle = await handle.getDirectoryHandle(entry.name);
+                                    await scanHandle(subDirHandle, entryPath);
+                                } catch (error) {
+                                    console.warn(`Could not access directory: ${entryPath}`, error);
+                                    
+                                    // Update progress
+                                    processedCount++;
+                                    const progress = Math.min((processedCount / totalCount) * 100, 99);
+                                    elements.progressBar.style.width = `${progress}%`;
+                                    elements.statusText.textContent = `Scanning... Processing: ${entryPath}`;
+                                }
+                            } else if (entry.kind === 'file') {
+                                try {
+                                    const file = await entry.getFile();
+                                    const fileExtension = entry.name.split('.').pop().toLowerCase();
+                                    const fileType = fileExtension ? '.' + fileExtension : '';
+                                    
+                                    // Determine file category
+                                    let fileCategory = 'other';
+                                    for (const [category, extensions] of Object.entries(fileCategories)) {
+                                        if (extensions.includes(fileType)) {
+                                            fileCategory = category;
+                                            break;
+                                        }
+                                    }
+                                    
+                                    results.push({
+                                        path: entryPath,
+                                        size: file.size / (1024 * 1024), // Convert to MB
+                                        type: fileType,
+                                        date: new Date(file.lastModified).toISOString().split('T')[0],
+                                        category: fileCategory
+                                    });
+                                    
+                                    // Update progress
+                                    processedCount++;
+                                    const progress = Math.min((processedCount / totalCount) * 100, 99);
+                                    elements.progressBar.style.width = `${progress}%`;
+                                    
+                                    if (processedCount % 50 === 0) {
+                                        elements.statusText.textContent = `Scanning... ${processedCount} files processed`;
+                                        // Allow UI to update
+                                        await new Promise(resolve => setTimeout(resolve, 0));
+                                    }
+                                } catch (error) {
+                                    console.warn(`Error processing file: ${entryPath}`, error);
+                                    
+                                    // Update progress
+                                    processedCount++;
+                                    const progress = Math.min((processedCount / totalCount) * 100, 99);
+                                    elements.progressBar.style.width = `${progress}%`;
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        console.warn(`Error scanning directory: ${path}`, error);
+                    }
+                }
+                
+                // Start scanning
+                await scanHandle(directoryHandle, basePath);
+                
+                return results;
+            }
+
+            function stopScan() {
+                if (state.scanning) {
+                    state.scanning = false;
+                    elements.statusText.textContent = 'Scan stopped by user.';
+                    elements.scanBtn.disabled = false;
+                    elements.stopBtn.disabled = true;
+                }
+            }
+
+            function buildDirectoryTree(files) {
+                const tree = { name: 'Root', children: {}, size: 0, count: 0 };
+                
+                files.forEach(file => {
+                    const pathParts = file.path.split(/[\/\\]/); // Split by both types of slashes
+                    let currentNode = tree;
+                    
+                    // Navigate through the path parts
+                    for (let i = 0; i < pathParts.length - 1; i++) {
+                        const part = pathParts[i];
+                        if (!part) continue; // Skip empty parts
+                        
+                        // Create node if it doesn't exist
+                        if (!currentNode.children[part]) {
+                            currentNode.children[part] = {
+                                name: part,
+                                children: {},
+                                size: 0,
+                                count: 0,
+                                path: pathParts.slice(0, i + 1).join('/')
+                            };
+                        }
+                        
+                        // Update size and count
+                        currentNode.children[part].size += file.size;
+                        currentNode.children[part].count++;
+                        
+                        // Move to next level
+                        currentNode = currentNode.children[part];
+                    }
+                    
+                    // Update root stats
+                    tree.size += file.size;
+                    tree.count++;
+                });
+                
+                return tree;
+            }
+            
+            function renderDirectoryTree(node, container, level = 0) {
+                // Clear container if top level
+                if (level === 0) {
+                    container.innerHTML = '';
+                }
+                
+                // Sort children by name
+                const sortedChildren = Object.values(node.children).sort((a, b) => 
+                    a.name.localeCompare(b.name)
+                );
+                
+                // Render each child
+                sortedChildren.forEach(child => {
+                    const hasChildren = Object.keys(child.children).length > 0;
+                    
+                    // Create item element
+                    const item = document.createElement('div');
+                    item.className = 'tree-item';
+                    item.dataset.path = child.path;
+                    
+                    // Create expand/collapse icon
+                    const icon = document.createElement('span');
+                    icon.className = 'tree-icon';
+                    icon.textContent = hasChildren ? '▶' : '•';
+                    
+                    // Create label with size info
+                    const label = document.createElement('span');
+                    const sizeText = child.size > 1024 
+                        ? `(${(child.size/1024).toFixed(1)} GB)` 
+                        : `(${child.size.toFixed(1)} MB)`;
+                    label.textContent = `${child.name} ${sizeText}`;
+                    
+                    // Add elements to item
+                    item.appendChild(icon);
+                    item.appendChild(label);
+                    container.appendChild(item);
+                    
+                    if (hasChildren) {
+                        // Create container for children
+                        const childrenContainer = document.createElement('div');
+                        childrenContainer.className = 'tree-children';
+                        container.appendChild(childrenContainer);
+                        
+                        // Handle expand/collapse
+                        item.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            
+                            // Toggle expanded state
+                            const isExpanded = childrenContainer.classList.toggle('expanded');
+                            icon.textContent = isExpanded ? '▼' : '▶';
+                            
+                            // Lazy render children when expanded
+                            if (isExpanded && childrenContainer.children.length === 0) {
+                                renderDirectoryTree(child, childrenContainer, level + 1);
+                            }
+                            
+                            // Store path in state when clicked
+                            state.selectedDirectory = child.path;
+                            
+                            // Highlight selected item
+                            document.querySelectorAll('.tree-item').forEach(el => 
+                                el.classList.remove('selected')
+                            );
+                            item.classList.add('selected');
+                            
+                            // Filter files to show only those in the selected directory
+                            filterByDirectory(child.path);
+                        });
+                    } else {
+                        // Handle leaf node click
+                        item.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            
+                            // Store path in state when clicked
+                            state.selectedDirectory = child.path;
+                            
+                            // Highlight selected item
+                            document.querySelectorAll('.tree-item').forEach(el => 
+                                el.classList.remove('selected')
+                            );
+                            item.classList.add('selected');
+                            
+                            // Filter files to show only those in the selected directory
+                            filterByDirectory(child.path);
+                        });
+                    }
+                });
+            }
+            
+            function filterByDirectory(directoryPath) {
+                if (!directoryPath) {
+                    // Filter files to show all
+                    state.currentView = state.scanData;
+                    displayDataVirtual(state.scanData);
+                    updateStatistics(state.scanData);
+                    updateFileTypeFilter(state.scanData);
+                } else {
+                    // Filter files to show only those in the selected directory
+                    const filteredFiles = state.scanData.filter(file => 
+                        file.path.startsWith(directoryPath)
+                    );
+                    
+                    // Update current view and display
+                    state.currentView = filteredFiles;
+                    displayDataVirtual(filteredFiles);
+                    updateStatistics(filteredFiles);
+                    updateFileTypeFilter(filteredFiles);
+                }
+            }
+
+            function displayDataVirtual(data) {
+                const container = elements.virtualTableContainer;
+                container.innerHTML = ''; // Clear previous
+
+                if (!data || data.length === 0) {
+                    container.innerHTML = '<div style="padding: 20px; color: #888;">No files to display.</div>';
+                    return;
+                }
+
+                // For simplicity, render all rows (for large data, implement virtual scrolling)
+                data.forEach(file => {
+                    const row = document.createElement('div');
+                    row.className = 'virtual-table-row';
+                    row.style.display = 'flex';
+                    row.style.borderBottom = '1px solid #eee';
+                    row.style.padding = '6px 0';
+
+                    row.innerHTML = `
+                        <div style="flex: 6; padding-left: 10px; overflow: hidden; text-overflow: ellipsis;">${file.path}</div>
+                        <div style="flex: 1; text-align: right;">${file.size.toFixed(2)}</div>
+                        <div style="flex: 1; text-align: center;">${file.type}</div>
+                        <div style="flex: 2; text-align: center;">${file.date}</div>
+                    `;
+
+                    // Optional: add click/select logic here
+
+                    container.appendChild(row);
+                });
+            }
+
+            function initEventListeners() {
+                // Main buttons
+                elements.selectDirBtn.addEventListener('click', selectDirectory);
+                elements.scanBtn.addEventListener('click', startScan);
+                elements.stopBtn.addEventListener('click', stopScan);
+                elements.applyFilterBtn.addEventListener('click', filterResults);
+                elements.suggestCloudBtn.addEventListener('click', suggestCloudFiles);
+                elements.findDuplicatesBtn.addEventListener('click', findDuplicates);
+                elements.resetBtn.addEventListener('click', resetTable);
+                elements.pieChartBtn.addEventListener('click', showPieChart);
+                elements.barChartBtn.addEventListener('click', showBarChart);
+                elements.categoryChartBtn.addEventListener('click', showCategoryChart);
+                elements.exportCsvBtn.addEventListener('click', exportCsv);
+                elements.themeToggle.addEventListener('click', toggleTheme);
+                elements.aboutBtn.addEventListener('click', showAbout);
+                
+                // Initialize virtual scrolling container
+                window.addEventListener('resize', () => {
+                    if (state.currentView.length > 0) {
+                        const containerHeight = elements.virtualTableContainer.clientHeight;
+                        state.visibleRows = Math.ceil(containerHeight / state.rowHeight) + 2;
+                        const scrollTop = elements.virtualTableContainer.scrollTop;
+                        renderVisibleRows(scrollTop, state.currentView);
+                    }
+                });
+                
+                // Context menu item events
+                elements.openExplorerMenu.addEventListener('click', () => {
+                    if (state.selectedRow) {
+                        alert(`Cannot directly open Explorer from browser, but the file is: ${state.selectedRow.dataset.path}`);
+                        hideContextMenu();
+                    }
+                });
+                
+                elements.openFileMenu.addEventListener('click', () => {
+                    if (state.selectedRow) {
+                        openFile(state.selectedRow.dataset.path);
+                        hideContextMenu();
+                    }
+                });
+                
+                elements.deleteMenu.addEventListener('click', () => {
+                    if (state.selectedRow) {
+                        const path = state.selectedRow.dataset.path;
+                        if (confirm(`Are you sure you want to delete this item?\n\n${path}`)) {
+                            // In this FSAPI implementation, we don't have direct delete permissions
+                            // Instead, we'll provide guidance
+                            alert(`The File System Access API in browsers currently doesn't support deletion operations. You would need to delete the file manually: ${path}`);
+                            
+                            // Simulate deletion for demo purposes by removing from data
+                            state.scanData = state.scanData.filter(item => item.path !== path);
+                            state.currentView = state.currentView.filter(item => item.path !== path);
+                            
+                            // Update display
+                            displayDataVirtual(state.currentView);
+                            updateStatistics(state.currentView);
+                            
+                            // Update directory tree
+                            state.directoryTree = buildDirectoryTree(state.scanData);
+                            renderDirectoryTree(state.directoryTree, elements.directoryTree);
+                            
+                            hideContextMenu();
+                        }
+                    }
+                });
+                
+                elements.copyToMenu.addEventListener('click', () => {
+                    if (state.selectedRow) {
+                        alert(`The File System Access API currently doesn't support moving or copying operations from the browser. You would need to copy the file manually: ${state.selectedRow.dataset.path}`);
+                        hideContextMenu();
+                    }
+                });
+                
+                elements.moveToCloudMenu.addEventListener('click', () => {
+                    if (state.selectedRow) {
+                        alert(`To move this file to cloud storage, you would need to manually upload it from your device to your preferred cloud provider: ${state.selectedRow.dataset.path}`);
+                        hideContextMenu();
+                    }
+                });
+                
+                // Modal close button
+                document.querySelector('.close').addEventListener('click', closeAbout);
+                
+                // Close modal when clicking outside
+                window.addEventListener('click', (e) => {
+                    if (e.target === elements.aboutModal) {
+                        closeAbout();
+                    }
+                });
+                
+                // Hide context menu on document click
+                document.addEventListener('click', (e) => {
+                    if (!elements.contextMenu.contains(e.target)) {
+                        hideContextMenu();
+                    }
+                });
+                
+                // Add keyboard event for ESC key
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape') {
+                        hideContextMenu();
+                        closeAbout();
+                    }
+                });
+                
+                // Filter input events for live filtering
+                elements.searchInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        filterResults();
+                    }
+                });
+            }
+
+            function filterResults() {
+                let filtered = state.scanData;
+
+                // Search filter
+                const search = elements.searchInput.value.trim().toLowerCase();
+                if (search) {
+                    filtered = filtered.filter(file => file.path.toLowerCase().includes(search));
+                }
+
+                // File type filter
+                const type = elements.fileTypeFilter.value;
+                if (type && type !== 'All') {
+                    filtered = filtered.filter(file => file.type === type);
+                }
+
+                // Category filter
+                const category = elements.fileCategoryFilter.value;
+                if (category && category !== 'All') {
+                    filtered = filtered.filter(file => file.category === category);
+                }
+
+                // Size filter
+                const size = elements.sizeFilter.value;
+                if (size && size !== 'Any') {
+                    if (size === '>1GB') filtered = filtered.filter(file => file.size > 1024);
+                    else if (size === '>100MB') filtered = filtered.filter(file => file.size > 100);
+                    else if (size === '>10MB') filtered = filtered.filter(file => file.size > 10);
+                    else if (size === '<1MB') filtered = filtered.filter(file => file.size < 1);
+                }
+
+                // Update state and UI
+                state.currentView = filtered;
+                displayDataVirtual(filtered);
+                updateStatistics(filtered);
+                updateFileTypeFilter(filtered);
+            }
+
+            function updateStatistics(data) {
+                console.log('updateStatistics called with:', data);
+                // Placeholder: Implement actual statistics update
+                if (!data) return;
+                elements.totalFiles.textContent = data.length;
+                const totalSize = data.reduce((sum, file) => sum + file.size, 0);
+                elements.totalSize.textContent = `${totalSize.toFixed(2)} MB`;
+                elements.avgSize.textContent = data.length > 0 ? `${(totalSize / data.length).toFixed(2)} MB` : '0 MB';
+            }
+
+            function updateFileTypeFilter(data) {
+                console.log('updateFileTypeFilter called with:', data);
+                // Placeholder: Implement actual file type filter update
+                if (!data) return;
+                const types = [...new Set(data.map(file => file.type))].sort();
+                elements.fileTypeFilter.innerHTML = '<option value="All">All</option>'; // Reset
+                types.forEach(type => {
+                    if (type) { // Ensure type is not empty
+                        const option = document.createElement('option');
+                        option.value = type;
+                        option.textContent = type;
+                        elements.fileTypeFilter.appendChild(option);
+                    }
+                });
+            }
+
+            function suggestCloudFiles() {
+                console.log('suggestCloudFiles called');
+                alert('Suggest Cloud Files: Not yet implemented.');
+            }
+
+            function findDuplicates() {
+                console.log('findDuplicates called');
+                alert('Find Duplicates: Not yet implemented.');
+            }
+
+            function resetTable() {
+                console.log('resetTable called');
+                state.currentView = state.scanData;
+                elements.searchInput.value = '';
+                elements.fileTypeFilter.value = 'All';
+                elements.fileCategoryFilter.value = 'All';
+                elements.sizeFilter.value = 'Any';
+                displayDataVirtual(state.currentView);
+                updateStatistics(state.currentView);
+                updateFileTypeFilter(state.currentView);
+                
+                if (state.chart) { 
+                    state.chart.destroy(); 
+                    state.chart = null; 
+                }
+                if (state.categoryChart) { 
+                    state.categoryChart.destroy(); 
+                    state.categoryChart = null; 
+                }
+                elements.chartSection.style.display = 'none';
+
+                if (state.selectedDirectory) { // Clear directory selection highlights/filters
+                    state.selectedDirectory = null;
+                    document.querySelectorAll('.tree-item.selected').forEach(el => el.classList.remove('selected'));
+                }
+            }
+
+            function showPieChart() {
+                console.log('showPieChart called');
+                if (state.chart) { state.chart.destroy(); state.chart = null; }
+                if (state.categoryChart) { state.categoryChart.destroy(); state.categoryChart = null; }
+
+                if (state.currentView.length === 0) {
+                    alert('No data to display in chart.');
+                    elements.chartSection.style.display = 'none';
+                    return;
+                }
+
+                const typeCounts = state.currentView.reduce((acc, file) => {
+                    const type = file.type || 'unknown'; // Handle files with no extension
+                    acc[type] = (acc[type] || 0) + 1;
+                    return acc;
+                }, {});
+
+                const sortedTypes = Object.entries(typeCounts).sort(([,a],[,b]) => b-a);
+                const topN = 10;
+                const otherCount = sortedTypes.slice(topN).reduce((sum, [,count]) => sum + count, 0);
+                const chartLabels = sortedTypes.slice(0, topN).map(([type]) => type);
+                const chartDataValues = sortedTypes.slice(0, topN).map(([,count]) => count);
+
+                if (otherCount > 0 && sortedTypes.length > topN) {
+                    chartLabels.push('Other');
+                    chartDataValues.push(otherCount);
+                }
+                
+                const chartData = {
+                    labels: chartLabels,
+                    datasets: [{
+                        label: 'Files by Type',
+                        data: chartDataValues,
+                        backgroundColor: [
+                            '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40',
+                            '#E7E9ED', '#83D47E', '#E07A5F', '#3D405B', '#C9CBCF'
+                        ].slice(0, chartLabels.length)
+                    }]
+                };
+
+                elements.chartTitle.textContent = 'File Types Distribution (by count)';
+                elements.chartSection.style.display = 'block';
+                state.chart = new Chart(elements.chartCanvas, {
+                    type: 'pie',
+                    data: chartData,
+                    options: { responsive: true, maintainAspectRatio: false }
+                });
+            }
+
+            function showBarChart() {
+                console.log('showBarChart called');
+                if (state.chart) { state.chart.destroy(); state.chart = null; }
+                if (state.categoryChart) { state.categoryChart.destroy(); state.categoryChart = null; }
+
+                if (state.currentView.length === 0) {
+                    alert('No data to display in chart.');
+                    elements.chartSection.style.display = 'none';
+                    return;
+                }
+
+                const topN = 15;
+                const sortedFiles = [...state.currentView].sort((a, b) => b.size - a.size);
+                const topFiles = sortedFiles.slice(0, topN);
+
+                const chartLabels = topFiles.map(file => {
+                    const parts = file.path.split(/[\/\\]/);
+                    return parts[parts.length-1] || file.path; // Just filename, fallback to path
+                });
+                const chartDataValues = topFiles.map(file => file.size);
+                
+                const chartData = {
+                    labels: chartLabels,
+                    datasets: [{
+                        label: `Top ${topN} Largest Files (MB)`,
+                        data: chartDataValues,
+                        backgroundColor: '#36A2EB',
+                        borderColor: '#2980b9',
+                        borderWidth: 1
+                    }]
+                };
+
+                elements.chartTitle.textContent = `Top ${topN} Largest Files`;
+                elements.chartSection.style.display = 'block';
+                state.chart = new Chart(elements.chartCanvas, { 
+                    type: 'bar',
+                    data: chartData,
+                    options: { 
+                        responsive: true, 
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Size (MB)'
+                                }
+                            },
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: 'File Name'
+                                },
+                                ticks: { // Prevent labels from becoming too cluttered
+                                    autoSkip: false,
+                                    maxRotation: 45,
+                                    minRotation: 45
+                                }
+                            }
+                        },
+                        plugins: {
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        let label = context.dataset.label || '';
+                                        if (label) {
+                                            label += ': ';
+                                        }
+                                        if (context.parsed.y !== null) {
+                                            label += context.parsed.y.toFixed(2) + ' MB';
+                                        }
+                                        const fileIndex = context.dataIndex;
+                                        if (topFiles[fileIndex]) {
+                                           label += ` (${topFiles[fileIndex].path})`;
+                                        }
+                                        return label;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            
+            function showCategoryChart() {
+                console.log('showCategoryChart called');
+                if (state.categoryChart) { state.categoryChart.destroy(); state.categoryChart = null; }
+                if (state.chart) { state.chart.destroy(); state.chart = null; } // Clear main chart canvas too
+
+                if (state.currentView.length === 0) {
+                    alert('No data to display in chart.');
+                    elements.chartSection.style.display = 'none';
+                    return;
+                }
+
+                const categoryCounts = state.currentView.reduce((acc, file) => {
+                    acc[file.category] = (acc[file.category] || 0) + 1;
+                    return acc;
+                }, {});
+
+                const chartData = {
+                    labels: Object.keys(categoryCounts),
+                    datasets: [{
+                        label: 'Files by Category',
+                        data: Object.values(categoryCounts),
+                        backgroundColor: [ /* Add diverse colors */
+                            '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40',
+                            '#E7E9ED', '#83D47E', '#E07A5F', '#3D405B'
+                        ]
+                    }]
+                };
+
+                elements.chartTitle.textContent = 'File Categories';
+                elements.chartSection.style.display = 'block';
+                state.categoryChart = new Chart(elements.chartCanvas, {
+                    type: 'doughnut',
+                    data: chartData,
+                    options: { responsive: true, maintainAspectRatio: false }
+                });
+                alert('Show Category Chart: Basic implementation added.');
+            }
+
+            function exportCsv() {
+                console.log('exportCsv called');
+                if (state.currentView.length === 0) {
+                    alert('No data to export.');
+                    return;
+                }
+                const csv = Papa.unparse(state.currentView);
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement("a");
+                if (link.download !== undefined) {
+                    const url = URL.createObjectURL(blob);
+                    link.setAttribute("href", url);
+                    link.setAttribute("download", "storage_analysis.csv");
+                    link.style.visibility = 'hidden';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }
+                alert('Export CSV: Basic implementation added.');
+            }
+
+            function toggleTheme() {
+                console.log('toggleTheme called');
+                document.body.classList.toggle('dark-theme');
+                state.theme = document.body.classList.contains('dark-theme') ? 'dark' : 'light';
+                localStorage.setItem('theme', state.theme);
+            }
+
+            function showAbout() {
+                console.log('showAbout called');
+                elements.aboutModal.style.display = 'block';
+            }
+
+            function initTableSorting() {
+                console.log('initTableSorting called');
+                // Placeholder: Implement actual table sorting
+                 elements.resultsTable.querySelectorAll('th').forEach(headerCell => {
+                    headerCell.addEventListener('click', () => {
+                        const column = headerCell.dataset.sort;
+                        const currentIsAscending = state.sortColumn === column && !state.sortDirection;
+                        
+                        state.sortColumn = column;
+                        state.sortDirection = !currentIsAscending; // Toggle direction
+                        
+                        sortData(state.currentView);
+                        displayDataVirtual(state.currentView);
+                        
+                        // Update header arrows (optional)
+                        elements.resultsTable.querySelectorAll('th').forEach(th => th.classList.remove('sorted-asc', 'sorted-desc'));
+                        headerCell.classList.toggle('sorted-asc', state.sortDirection);
+                        headerCell.classList.toggle('sorted-desc', !state.sortDirection);
+                    });
+                });
+            }
+
+            function sortData(dataToSort) {
+                const { sortColumn, sortDirection } = state;
+                dataToSort.sort((a, b) => {
+                    let valA = a[sortColumn];
+                    let valB = b[sortColumn];
+
+                    if (typeof valA === 'string') valA = valA.toLowerCase();
+                    if (typeof valB === 'string') valB = valB.toLowerCase();
+            
+                    if (valA < valB) return sortDirection ? 1 : -1;
+                    if (valA > valB) return sortDirection ? -1 : 1;
+                    return 0;
+                });
+            }
+            
+            function renderVisibleRows(scrollTop, data) {
+                console.log('renderVisibleRows called with scrollTop:', scrollTop, 'and data:', data);
+                // This is a complex feature (virtual scrolling)
+                // For now, we are rendering all rows in displayDataVirtual.
+                // If you want full virtual scrolling, this function needs a more detailed implementation.
+                // It would calculate which rows are visible based on scrollTop and render only those.
+            }
+
+            function hideContextMenu() {
+                console.log('hideContextMenu called');
+                elements.contextMenu.style.display = 'none';
+            }
+
+            function openFile(path) {
+                console.log('openFile called with path:', path);
+                alert(`Open File: Cannot directly open files from the browser for security reasons. Path: ${path}`);
+            }
+
+            function closeAbout() {
+                console.log('closeAbout called');
+                elements.aboutModal.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
